@@ -22,7 +22,7 @@ def batch_entity_names(batch, entity_name_map):
             names = []
             for i in local_indices:
                 if i >= len(entity_name_map[node_type]):
-                    raise IndexError(f"{node_type} 的局部索引 {i} 超出 entity_name_map 长度 {len(entity_name_map[node_type])}")
+                    raise IndexError(f"{node_type} local index {i} exceeds entity_name_map length {len(entity_name_map[node_type])}")
                 names.append(entity_name_map[node_type][i])
             entity_name_dict[node_type] = names
     return entity_name_dict
@@ -53,7 +53,7 @@ def get_tcm_with_train_target(hetero_data):
             h_ids = hetero_data[edge_type].edge_index[0, mask].detach().cpu()
             tcm_ids.update(h_ids.tolist())
     if not tcm_ids:
-        raise ValueError("训练集中没有任何 TCM_ID 与 target 边")
+        raise ValueError("No TCM_ID to target edges in training set")
     return torch.tensor(sorted(tcm_ids), dtype=torch.long)
 
 def get_tcm_with_val_target(hetero_data):
@@ -67,7 +67,7 @@ def get_tcm_with_val_target(hetero_data):
             h_ids = hetero_data[edge_type].edge_index[0, mask].detach().cpu()
             tcm_ids.update(h_ids.tolist())
     if not tcm_ids:
-        raise ValueError("验证集中没有任何 TCM_ID 与 target 边")
+        raise ValueError("No TCM_ID to target edges in validation set")
     return torch.tensor(sorted(tcm_ids), dtype=torch.long)
 
 def _interleave_by_degree(seeds, deg):
@@ -159,8 +159,8 @@ def load_node_embeddings(embedding_dir, emb_type='DeepWalk'):
             arr = np.hstack([z.real, z.imag]).astype(np.float32)
             return arr
         except Exception as e:
-            raise ValueError(f"无法解析预训练向量文件: {path}；"
-                             f"既不是纯实数，也不是标准复数文本。原始错误: {e}")
+            raise ValueError(f"Cannot parse pretrained embedding file: {path}; "
+                             f"neither pure real numbers nor standard complex text. Original error: {e}")
     emb_file_map = {
         'TCM_ID': f'{emb_type}_embedding.txt',
         'Protein': f'{emb_type}_embedding.txt',
@@ -337,7 +337,7 @@ def export_all_embeddings_csv(model, hetero_data, full_entity_id_map, out_csv_pa
             try:
                 x = model._lookup_embed(nt, name_dict.get(nt, []), data, device)
             except AttributeError:
-                raise RuntimeError("model._lookup_embed(nt, names, data, device) 未定义，请保持与现有实现一致。")
+                raise RuntimeError("model._lookup_embed(nt, names, data, device) is not defined, please keep consistent with existing implementation.")
             if x.size(0) < n:
                 pad = torch.zeros(n - x.size(0), x.size(1), device=x.device, dtype=x.dtype)
                 x = torch.cat([x, pad], dim=0)
@@ -402,7 +402,7 @@ def export_all_embeddings_csv(model, hetero_data, full_entity_id_map, out_csv_pa
             df.insert(1, 'type', nt)
             blocks.append(df)
         if not blocks:
-            print("[WARN] 没有可导出的类型。")
+            print("[WARN] No exportable types.")
             return
         big = pd.concat(blocks, ignore_index=True)
         big.to_csv(out_csv_path, index=False, encoding='utf-8-sig')

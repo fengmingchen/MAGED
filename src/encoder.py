@@ -49,11 +49,11 @@ def _embed_sentences(sentences, model_name, device=None, batch_size=64, cache_pa
     if SentenceTransformer is None:
         raise ImportError("pip install sentence-transformers")
     if not os.path.isdir(model_name):
-        raise FileNotFoundError(f"本地模型目录不存在: {model_name}")
+        raise FileNotFoundError(f"Local model directory does not exist: {model_name}")
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = SentenceTransformer(model_name, device=device, local_files_only=True)
     vecs = []
-    for i in tqdm(range(0, len(sentences), batch_size), desc="文本向量编码", unit="batch"):
+    for i in tqdm(range(0, len(sentences), batch_size), desc="Text vector encoding", unit="batch"):
         batch = sentences[i:i+batch_size]
         emb = model.encode(batch, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
         vecs.append(emb)
@@ -83,7 +83,7 @@ def build_text_nes_features(property_csv_path, nes_csv_path, mapping_csv_path,
     nes_all.index = nes_all.index.astype(str).str.strip()
     herbs = sorted(set(prop.index) & set(nes_all.index))
     if not herbs:
-        raise ValueError("属性表与 NES 没有交集中药，请检查名称一致。")
+        raise ValueError("Property table and NES have no overlapping herbs. Please check name consistency.")
     prop = prop.loc[herbs]
     sentences = [_row_to_sentence(h, prop.loc[h]) for h in herbs]
     cache_path = None

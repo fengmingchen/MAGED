@@ -12,7 +12,7 @@ class ConcatMLPScorer(BaseScorer):
         self.dim = dim
         if isinstance(hidden, int):
             hidden = (hidden,)
-        assert len(hidden) >= 1, "hidden 至少包含一层宽度"
+        assert len(hidden) >= 1, "hidden must contain at least one layer width"
         h0 = hidden[0]
         self.fh = nn.Linear(dim, h0, bias=False)   # W_h
         self.ft = nn.Linear(dim, h0, bias=False)   # W_t
@@ -39,7 +39,7 @@ class ConcatMLPScorer(BaseScorer):
             src, dst = args
             return self._score_block(src, dst)
         else:
-            raise TypeError("ConcatMLPScorer.forward 期望 1 或 2 个参数")
+            raise TypeError("ConcatMLPScorer.forward expects 1 or 2 arguments")
 
     def _score_block(self, src: torch.Tensor, dst: torch.Tensor) -> torch.Tensor:
         bs = src.size(0)

@@ -152,7 +152,7 @@ class KnowledgeGraphBuilder:
             return entity_id.split(":")[0]
     
     def load_all_triples(self):
-        print("开始加载知识图谱三元组...")
+        print("Loading knowledge graph triplets...")
         herb_mrna_path = os.path.join(self.data_dir, self.relation_files["herb_upregulates_mRNA"])
         self._process_herb_mrna_file(herb_mrna_path)
         tcm_mm_path = os.path.join(self.data_dir, self.relation_files["tcm_symptom_corresponds_to_mm_symptom"])
@@ -163,14 +163,14 @@ class KnowledgeGraphBuilder:
                 continue
             file_path = os.path.join(self.data_dir, file_name)
             if os.path.exists(file_path):
-                print(f"处理 {rel_type} 关系: {file_name}")
+                print(f"Processing {rel_type} relation: {file_name}")
                 self._process_generic_file(file_path, rel_type)
-        print(f"总共加载 {len(self.triples)} 个三元组")
-        print(f"实体数量: {len(self.entity_id_map)}")
-        print(f"关系统计: {dict(self.relation_stats)}")
+        print(f"Total loaded {len(self.triples)} triplets")
+        print(f"Entity count: {len(self.entity_id_map)}")
+        print(f"Relation statistics: {dict(self.relation_stats)}")
     
     def build_hetero_graph(self):
-        print("\n构建异质图...")
+        print("\nBuilding heterogeneous graph...")
         data = HeteroData()
         node_type_to_global_indices = defaultdict(list)
         for entity_id, global_idx in self.entity_id_map.items():
@@ -185,7 +185,7 @@ class KnowledgeGraphBuilder:
             self.local_idx_to_entity_name[node_type] = [
                 self.reverse_entity_map[gidx] for gidx in global_indices
             ]
-            print(f"添加节点类型: {node_type}, 数量: {num_nodes}")
+            print(f"Adding node type: {node_type}, count: {num_nodes}")
         type_to_local_index = {}
         for node_type, global_indices in node_type_to_global_indices.items():
             sorted_indices = sorted(global_indices)
@@ -211,7 +211,7 @@ class KnowledgeGraphBuilder:
             head_local_idx = type_to_local_index[head_type].get(head_idx)
             tail_local_idx = type_to_local_index[tail_type].get(tail_idx)
             if head_local_idx is None or tail_local_idx is None:
-                print(f"警告: 无法找到局部索引 head_idx={head_idx} head_type={head_type} 或 tail_idx={tail_idx} tail_type={tail_type}")
+                print(f"Warning: Cannot find local index head_idx={head_idx} head_type={head_type} or tail_idx={tail_idx} tail_type={tail_type}")
                 continue
             edge_type = (head_type, rel_type, tail_type)
             if edge_type not in edge_index_dict:
@@ -222,16 +222,16 @@ class KnowledgeGraphBuilder:
             head_type, rel_type, tail_type = edge_type
             edge_index_tensor = torch.tensor(edge_index, dtype=torch.long)
             data[head_type, rel_type, tail_type].edge_index = edge_index_tensor
-            print(f"添加边: {head_type} -[{rel_type}]-> {tail_type}, 数量: {edge_index_tensor.size(1)}")
+            print(f"Adding edge: {head_type} -[{rel_type}]-> {tail_type}, count: {edge_index_tensor.size(1)}")
         for (head_type, rel_type, tail_type), edge_index in list(edge_index_dict.items()):
             if rel_type in SYMMETRIC_REL and not rel_type.startswith('rev_'):
                 rev_rel = f"rev_{rel_type}"
                 et_rev = (tail_type, rev_rel, head_type)
                 if et_rev not in data.edge_types:
                     ei = torch.tensor(edge_index, dtype=torch.long)
-                    ei_rev = ei.flip(0)  # 反向
+                    ei_rev = ei.flip(0)  # Reverse
                     data[et_rev].edge_index = ei_rev
-                    print(f"添加反向边: {tail_type} -[{rev_rel}]-> {head_type}, 数量: {ei_rev.size(1)}")
+                    print(f"Adding reverse edge: {tail_type} -[{rev_rel}]-> {head_type}, count: {ei_rev.size(1)}")
         try:
             pruned_data = prune_to_largest_cc(data)
             for node_type in pruned_data.node_types: 
@@ -245,7 +245,7 @@ class KnowledgeGraphBuilder:
             self.hetero_data = pruned_data
             return pruned_data, self.local_idx_to_entity_name
         except Exception as e:
-            print("最大连通分量修剪失败:", e)
+            print("Largest connected component pruning failed:", e)
             for node_type in data.node_types: 
                 num_nodes = data[node_type].num_nodes
                 data[node_type].node_id = torch.arange(num_nodes, dtype=torch.long)
@@ -260,7 +260,7 @@ class KnowledgeGraphBuilder:
     def split_datasets(self, n_splits=5, test_ratio=0.2, random_state=42):
         from collections import defaultdict
         import numpy as np
-        print("\n划分数据集...")
+        print("\nSplitting dataset...")
         target_triples = []
         for target_type in TARGET_TYPES:  # ['Protein','TF','RBP']
             et = ("TCM_ID", "herb_modulates_target", target_type)
@@ -269,7 +269,7 @@ class KnowledgeGraphBuilder:
                 for src_idx, dst_idx in ei.t().tolist():
                     target_triples.append((src_idx, dst_idx, "herb_modulates_target", target_type))
         target_triples = np.array(target_triples, dtype=object)
-        print(f"中药-靶点三元组数量: {len(target_triples)}")
+        print(f"Herb-target triplet count: {len(target_triples)}")
         rng = np.random.RandomState(random_state)
         def group_by_herb(triples):
             herb2idx = defaultdict(list)
@@ -325,7 +325,7 @@ class KnowledgeGraphBuilder:
             fold_pairs = []
             for i in range(n_splits):
                 val_i = sorted(set(folds_val[i]) - ban_val)
-                train_i = sorted(list(all_idx_set - set(val_i)))   # 其余全部进 train
+                train_i = sorted(list(all_idx_set - set(val_i)))   # All remaining go to train
                 fold_pairs.append((np.array(train_i, dtype=int), np.array(val_i, dtype=int)))
             return fold_pairs
         self.target_folds = edge_level_kfold_balanced(t_remain, n_splits, rng)
@@ -352,10 +352,10 @@ class KnowledgeGraphBuilder:
                 parts = ", ".join([f"{k}:{ty_count[k]}" for k in TARGET_TYPES if ty_count.get(k, 0) > 0])
                 print(f"[Fold{fi}] val_edges={total_val} | by_type {{{parts}}} | cold_herb={cold}")
                 if cold > 0:
-                    print(f"  -> 警告：发现 {cold} 个冷启动 herb（该折训练侧无其正边）。请检查 warm-start 约束是否被外部流程破坏。")
-        print(f"训练/验证总数: {len(self.t_remain)}，测试集数: {len(self.t_test)}")
+                    print(f"  -> Warning: Found {cold} cold-start herbs (no positive edges in training set for this fold). Please check if warm-start constraint is violated by external process.")
+        print(f"Train/validation total: {len(self.t_remain)}, test set count: {len(self.t_test)}")
         report_folds(self.t_remain, self.target_folds)
-        print("五折交叉划分完成：测试集覆盖全部中药；验证集满足暖启动；按 (herb,type) 均衡轮转。")
+        print("5-fold cross-validation split completed: test set covers all herbs; validation set satisfies warm-start; balanced rotation by (herb,type).")
 
     def _create_edge_masks(self, train_edges, val_edges, test_edges):
         for target_type in TARGET_TYPES:
@@ -389,7 +389,7 @@ class KnowledgeGraphBuilder:
             self.hetero_data[edge_type].test_mask = test_mask
     
     def prepare_node_features(self, herb_data_dict):
-        print("\n准备节点特征...")
+        print("\nPreparing node features...")
         if hasattr(self.hetero_data["TCM_ID"], 'global_indices'):
             globals_ = self.hetero_data["TCM_ID"].global_indices.tolist()
             herb_tcm_ids = [self.reverse_entity_map[g] for g in globals_]
@@ -406,7 +406,7 @@ class KnowledgeGraphBuilder:
             return torch.stack(out).float()
         self.hetero_data["TCM_ID"].text_feat = _stack_or_zero(text_list)
         self.hetero_data["TCM_ID"].nes_feat  = _stack_or_zero(nes_list)
-        print("中药 text_feat:", tuple(self.hetero_data["TCM_ID"].text_feat.shape),
+        print("Herb text_feat:", tuple(self.hetero_data["TCM_ID"].text_feat.shape),
             "nes_feat:", tuple(self.hetero_data["TCM_ID"].nes_feat.shape))
 
         

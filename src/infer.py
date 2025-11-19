@@ -129,25 +129,25 @@ def _make_warmup_graph(hetero_data, edges: List[Tuple[str,str,str]]):
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="MAGED Inference: 直接加载已训练好的折别模型进行测试评估与Top-K候选导出（无训练）"
+        description="MAGED Inference: Load trained fold models for test evaluation and Top-K candidate export (no training)"
     )
     p.add_argument("--property_csv_path", type=str, default=INFER_DEFAULTS["property_csv_path"],
-                   help="中药属性 CSV")
+                   help="Herb property CSV")
     p.add_argument("--nes_csv_path", type=str, default=INFER_DEFAULTS["nes_csv_path"],
-                   help="NES 矩阵 CSV")
+                   help="NES matrix CSV")
     p.add_argument("--mapping_csv_path", type=str, default=INFER_DEFAULTS["mapping_csv_path"],
-                   help="中药中文名↔TCM_ID 映射表 CSV")
+                   help="Herb Chinese name ↔ TCM_ID mapping table CSV")
     p.add_argument("--data_dir", type=str, default=INFER_DEFAULTS["data_dir"],
-                   help="知识图谱三元组目录")
+                   help="Knowledge graph triplets directory")
     p.add_argument("--results_dir", type=str, default=INFER_DEFAULTS["results_dir"],
-                   help="推理输出目录（指标与TopK）")
+                   help="Inference output directory (metrics and TopK)")
     p.add_argument("--text_model", type=str, default=INFER_DEFAULTS["text_model"],
-                   help="本地文本编码模型目录（如 bge-small-zh-v1.5）")
+                   help="Local text encoding model directory (e.g., bge-small-zh-v1.5)")
     p.add_argument("--model_dir", type=str, default=INFER_DEFAULTS["model_dir"],
-                   help="保存“每折最佳模型(.pth)”与实体映射(.pth/.json)和 model_meta 的目录")
-    p.add_argument("--folds", type=int, default=5, help="需要评测的折数（与训练时保持一致）")
+                   help="Directory to save best model per fold (.pth), entity mappings (.pth/.json), and model_meta")
+    p.add_argument("--folds", type=int, default=5, help="Number of folds to evaluate (must match training)")
     p.add_argument("--model_glob", type=str, default=None,
-                   help="可选：自定义匹配模式寻找每折权重，如 '*best_model_fold{fold}.pth'；默认自动匹配")
+                   help="Optional: Custom pattern to find weights per fold, e.g., '*best_model_fold{fold}.pth'; default auto-match")
     p.add_argument("--gat_in_dim", type=int, default=128)
     p.add_argument("--gat_hidden_dim", type=int, default=128)
     p.add_argument("--gat_layers", type=int, default=3)
@@ -158,8 +158,8 @@ def parse_args():
     p.add_argument("--ablation", type=str, default="none")
     p.add_argument("--scorer_name", type=str, default="Dot")
     p.add_argument("--topk_herb", type=str, default=None,
-                   help='指定中药 ID 或中文名（如 "TCM_ID:HTHP00105" 或 "黄芩"）；为空则不导出Top-K')
-    p.add_argument("--topk_k", type=int, default=300, help="Top-K 的 K 值")
+                   help='Specify herb ID or Chinese name (e.g., "TCM_ID:HTHP00105" or "黄芩"); empty to skip Top-K export')
+    p.add_argument("--topk_k", type=int, default=300, help="Top-K K value")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", type=str, default=None, choices=[None, "cpu", "cuda"])
     args = p.parse_args()
@@ -175,7 +175,7 @@ def _find_checkpoint(model_dir: str, fold: int, model_glob: str = None) -> str:
         paths = glob.glob(os.path.join(model_dir, pattern))
     else:
         paths = glob.glob(os.path.join(model_dir, f"*best_model_fold{fold}.pth"))
-    assert len(paths) > 0, f"[infer] 找不到第 {fold} 折模型权重，请检查 --model_dir 或 --model_glob。"
+    assert len(paths) > 0, f"[infer] Cannot find fold {fold} model weights. Please check --model_dir or --model_glob."
     paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return paths[0]
 
@@ -188,11 +188,11 @@ def _find_entity_map(model_dir: str, fold: int) -> str:
 
 def _assert_same_mapping(built_map: Dict[str, List[str]], saved_map: Dict[str, List[str]]):
     for nt in saved_map.keys():
-        assert nt in built_map, f"[infer] 训练时包含节点类型 {nt}，但当前构图缺失。"
+        assert nt in built_map, f"[infer] Node type {nt} was included during training but is missing in current graph construction."
         a, b = list(map(str, saved_map[nt])), list(map(str, built_map[nt]))
-        assert len(a) == len(b), f"[infer] 节点数不一致: {nt} 训练={len(a)} 推理={len(b)}"
+        assert len(a) == len(b), f"[infer] Node count mismatch: {nt} training={len(a)} inference={len(b)}"
         assert all(x == y for x, y in zip(a, b)), (
-            f"[infer] 节点次序与训练不一致: {nt}。请确保构图与训练时完全一致或复用训练时的 entity_id_map。"
+            f"[infer] Node order inconsistent with training for {nt}. Please ensure graph construction matches training exactly or reuse training entity_id_map."
         )
 
 def _maybe_map_herb_name_to_id(mapping_csv_path: str, herb_query: str) -> str:
@@ -203,7 +203,7 @@ def _maybe_map_herb_name_to_id(mapping_csv_path: str, herb_query: str) -> str:
     try:
         mdf = pd.read_csv(mapping_csv_path)
         id_col = "TCM_ID" if "TCM_ID" in mdf.columns else None
-        name_cols = [c for c in mdf.columns if any(k in c.lower() for k in ["name", "中药", "herb"])]
+        name_cols = [c for c in mdf.columns if any(k in c.lower() for k in ["name", "herb"])]
         if id_col and name_cols:
             rows = mdf[[id_col] + name_cols]
             hit = rows[rows.apply(lambda r: any(str(herb_query) == str(r[c]) for c in name_cols), axis=1)]
@@ -248,8 +248,8 @@ def main():
         real_state = state["state_dict"] if isinstance(state, dict) and isinstance(state.get("state_dict"), dict) else state
         trained_edges = extract_edge_types_from_state(real_state)
         if len(trained_edges) == 0:
-            raise RuntimeError("[infer] 无法从 checkpoint 的 state_dict 键名中解析出任何边类型。"
-                               "请检查保存键名或正则。")
+            raise RuntimeError("[infer] Cannot parse any edge types from checkpoint state_dict keys. "
+                               "Please check saved key names or regex.")
         hp_defaults = dict(
             gat_in_dim=args.gat_in_dim, gat_hidden_dim=args.gat_hidden_dim, gat_layers=args.gat_layers,
             num_heads=args.num_heads, attn_dropout=args.attn_dropout, context_dim=args.context_dim,
@@ -259,7 +259,7 @@ def main():
         hp_used = _override_hparams_from_meta(hp_defaults, meta) if meta else hp_defaults
         complete_edges = [et for et in trained_edges if _edge_complete_in_state(et, real_state, hp_used["gat_layers"])]
         if len(complete_edges) == 0:
-            raise RuntimeError("[infer] 从 checkpoint 解析到的关系里，没有任何一条在所有 GNN 层都具备 lin_src/lin_dst 权重；无法严格加载。")
+            raise RuntimeError("[infer] None of the relations parsed from checkpoint have lin_src/lin_dst weights in all GNN layers; cannot load strictly.")
         target_edges = complete_edges
         print(f"[edges] from_ckpt={len(trained_edges)}  complete_used={len(complete_edges)}")
         _reconcile_heterodata_edge_types(hetero_data, target_edges)
@@ -281,7 +281,7 @@ def main():
                 saved_map = json.load(f)
             _assert_same_mapping(full_entity_id_map, saved_map)
         else:
-            print("[warn] 未找到保存的 entity_map；默认认为当前构图与训练一致。")
+            print("[warn] Saved entity_map not found; assuming current graph construction matches training.")
         print("[hparams] used:", {k: hp_used[k] for k in ["gat_in_dim","gat_hidden_dim","gat_layers","num_heads","attn_dropout","context_dim","residual_mode","ablation","scorer_name"]})
         fusion_enc = FusionEncoder(text_dim=ds, nes_dim=dn, context_dim=hp_used["context_dim"])
         model_init_params = dict(
@@ -326,7 +326,7 @@ def main():
             herb_query = _maybe_map_herb_name_to_id(args.mapping_csv_path, str(args.topk_herb).strip())
             tcm_list = list(map(str, full_entity_id_map['TCM_ID']))
             herb2local = {name: i for i, name in enumerate(tcm_list)}
-            assert herb_query in herb2local, f"[infer] 找不到中药：{args.topk_herb}（既非 TCM_ID 也非映射表可解析的中文名）"
+            assert herb_query in herb2local, f"[infer] Cannot find herb: {args.topk_herb} (neither TCM_ID nor Chinese name parseable from mapping table)"
             h_idx = herb2local[herb_query]
             size_map = {t: (data_gpu[t].num_nodes if t in data_gpu.node_types else 0) for t in TARGET_TYPES}
             offsets, _ptr = {}, 0
@@ -367,16 +367,16 @@ def main():
             out_dir = os.path.join(args.results_dir, "topk"); os.makedirs(out_dir, exist_ok=True)
             csv_path = os.path.join(out_dir, f"top{K}_{herb_query.replace(':','_')}_fold{fold}.csv")
             df_top.to_csv(csv_path, index=False, encoding='utf-8-sig')
-            print(f"[TopK] Herb={herb_query} 的前 {K} 个候选（预览前20行）：")
+            print(f"[TopK] Top {K} candidates for Herb={herb_query} (preview first 20 rows):")
             print(df_top.head(20).to_string(index=False))
-            print(f"[TopK] 已保存至：{csv_path}")
+            print(f"[TopK] Saved to: {csv_path}")
         del model, data_gpu
         if torch.cuda.is_available(): torch.cuda.empty_cache()
         gc.collect()
     df = pd.DataFrame(all_test_metrics)
-    print("\n[Infer] 五折测试集评估均值：")
+    print("\n[Infer] 5-fold test set evaluation mean:")
     print(df.mean(numeric_only=True))
-    print("[Infer] 五折测试集评估标准差：")
+    print("[Infer] 5-fold test set evaluation std:")
     print(df.std(numeric_only=True))
     out_csv = os.path.join(args.results_dir, "infer_test_results_folds.csv")
     df.to_csv(out_csv, index=False, encoding="utf-8-sig")

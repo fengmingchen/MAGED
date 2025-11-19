@@ -172,7 +172,7 @@ class HierarchicalGNN(nn.Module):
             'mRNA': in_channels, 'DNA': in_channels, 'lncRNA': in_channels, 'miRNA': in_channels
         }
         for _ in range(num_layers):
-            self.layer_in_dims.append(dict(node_dims))  # 快照
+            self.layer_in_dims.append(dict(node_dims))  # Snapshot
             self.convs.append(
                 self._create_conv_layer(
                     in_dims=node_dims, out_channels=hidden_channels, context_dim=context_dim
@@ -406,7 +406,7 @@ class MAGED(nn.Module):
         for node_type, count in node_counts.items():
             if pretrained_embeddings is not None and node_type in pretrained_embeddings:
                 emb_tensor, id_mapping = pretrained_embeddings[node_type]
-                print(f"[INFO] {node_type} 预训练 embedding 加载成功, shape={emb_tensor.shape}")
+                print(f"[INFO] {node_type} pretrained embedding loaded successfully, shape={emb_tensor.shape}")
                 emb_layer = nn.Embedding.from_pretrained(emb_tensor, freeze=False)
                 self.embedding[node_type] = emb_layer
                 self.idmap[node_type] = id_mapping
@@ -607,7 +607,7 @@ def compute_target_loss(
             gid_to_local = {int(g): i for i, g in enumerate(gids)}
         h_local = edge_index[0].to(device)
         t_local = edge_index[1].to(device)
-        order = torch.argsort(h_local)                       # O(E log E)，但 E 为该 batch 的边数
+        order = torch.argsort(h_local)                       # O(E log E), where E is the number of edges in this batch
         h_sorted = h_local[order]
         t_sorted = t_local[order]
         uniq_h, counts = torch.unique_consecutive(h_sorted, return_counts=True)
@@ -752,9 +752,9 @@ def evaluate_model(model, data, full_entity_id_map, mask_type='test'):
         pred_cols = target_pred.size(1)
         single = [t for t in all_types if size_map[t] == pred_cols]
         if len(single) == 1:
-            target_kind = single[0]     # 例如只评 Protein 或只评 TF
+            target_kind = single[0]     # e.g., only evaluate Protein or only evaluate TF
         else:
-            target_kind = 'Target'      # 合并评估（多类型拼接）
+            target_kind = 'Target'      # Combined evaluation (multiple types concatenated)
         target_metrics = compute_metrics_by_herb(
             target_pred, data,
             'herb_modulates_target', target_kind,
@@ -775,14 +775,14 @@ def evaluate_model(model, data, full_entity_id_map, mask_type='test'):
                 if mask is not None:
                     count = mask.sum().item()
                 else:
-                    print(f"{edge_type}: 无{mask_type}掩码")
+                    print(f"{edge_type}: No {mask_type} mask")
         return target_metrics
 
 def compute_metrics_by_herb(pred, data, relation, target_type, mask_type='test'):
     herb_indices = data['TCM_ID'].node_id
     num_herbs = len(herb_indices)
-    print(f"\n开始评估 {target_type} 预测 ({mask_type}集) ...")
-    print(f"中药节点数量: {num_herbs}")
+    print(f"\nStarting evaluation of {target_type} predictions ({mask_type} set) ...")
+    print(f"Herb node count: {num_herbs}")
     hr1_sum = hr3_sum = hr5_sum = hr10_sum = hr50_sum = 0.0
     ndcg1_sum = ndcg3_sum = ndcg5_sum = ndcg10_sum = ndcg50_sum = 0.0
     recall1_sum = recall10_sum = recall50_sum = recall100_sum = recall200_sum = recall300_sum = recall500_sum = 0.0
@@ -852,7 +852,7 @@ def compute_metrics_by_herb(pred, data, relation, target_type, mask_type='test')
                 ei_eval = edge_index[:, m_eval]
             else:
                 ei_eval = edge_index[:, []]
-            eval_targets_local = ei_eval[1][ei_eval[0] == herb_idx_int]  # 该 herb 的（本划分）目标局部索引
+            eval_targets_local = ei_eval[1][ei_eval[0] == herb_idx_int]  # This herb's (this split) target local indices
             if m_all is not None:
                 ei_all = edge_index[:, m_all]
             else:

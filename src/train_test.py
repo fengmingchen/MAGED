@@ -87,10 +87,10 @@ def parse_args():
     p.add_argument("--data_dir",          type=str, default=DEFAULT_HP["data_dir"])
     p.add_argument("--results_dir",       type=str, default=DEFAULT_HP["results_dir"])
     p.add_argument("--text_model",        type=str, default=DEFAULT_HP["text_model"])
-    p.add_argument("--output_dir", type=str, default=None, help="预训练节点向量目录（use_pretrained=1 时需要）")
-    p.add_argument("--model_dir", type=str, default=None, help="保存模型的目录（默认 results_dir/model_results）")
+    p.add_argument("--output_dir", type=str, default=None, help="Pretrained node embedding directory (required when use_pretrained=1)")
+    p.add_argument("--model_dir", type=str, default=None, help="Directory to save models (default: results_dir/model_results)")
     p.add_argument("--folds", type=int, default=5)
-    p.add_argument("--save_model", action="store_true", help="保存每折最佳模型与实体映射")
+    p.add_argument("--save_model", action="store_true", help="Save best model per fold and entity mappings")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--use_pretrained", type=int, choices=[0,1], default=None)
     p.add_argument("--emb_type", type=str, default=None)
@@ -157,7 +157,7 @@ def main():
     if H.get('use_pretrained', True) and args.output_dir:
         pretrained_embeddings = load_node_embeddings(args.output_dir, emb_type=H['emb_type'])
     elif H.get('use_pretrained', True) and not args.output_dir:
-        print("[WARN] use_pretrained=1 但未提供 --output_dir，将跳过加载预训练节点向量。")
+        print("[WARN] use_pretrained=1 but --output_dir not provided, will skip loading pretrained node embeddings.")
     fusion_enc = FusionEncoder(text_dim=ds, nes_dim=dn, context_dim=H['context_dim'])
     model_init_params = dict(
         node_counts={nt: hetero_data[nt].num_nodes for nt in hetero_data.node_types},
@@ -287,7 +287,7 @@ def main():
                     json.dump(to_jsonable(full_entity_id_map), open(map_json, "w", encoding="utf-8"),
                               ensure_ascii=False, indent=2)
                 except Exception as e:
-                    print(f"[WARN] 写 entity_map JSON 失败：{e}")
+                    print(f"[WARN] Failed to write entity_map JSON: {e}")
                 try:
                     edge_types_from_state = extract_edge_types_from_state(best_model_state)
                 except Exception:
@@ -341,7 +341,7 @@ def main():
                     json.dump(meta, open(meta_json, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
                     print(f"[SAVE] model_meta saved: {meta_json}")
                 except Exception as e:
-                    print(f"[WARN] 写 model_meta JSON 失败：{e}")
+                    print(f"[WARN] Failed to write model_meta JSON: {e}")
         data_gpu = hetero_data.to(device)
         test_metrics = evaluate_model(model, data_gpu, full_entity_id_map, mask_type='test')
         all_test_metrics.append(test_metrics)
@@ -352,8 +352,8 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache(); gc.collect()
     df = pd.DataFrame(all_test_metrics)
-    print("\n五折测试集评估均值：");  print(df.mean(numeric_only=True))
-    print("五折测试集评估标准差：");   print(df.std(numeric_only=True))
+    print("\n5-fold test set evaluation mean:");  print(df.mean(numeric_only=True))
+    print("5-fold test set evaluation std:");   print(df.std(numeric_only=True))
     out_csv = os.path.join(
         results_dir, "test_results_folds.csv"
     )
