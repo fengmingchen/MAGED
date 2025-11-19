@@ -333,7 +333,7 @@ def main():
             for t in TARGET_TYPES:
                 offsets[t] = _ptr; _ptr += size_map.get(t, 0)
             scores = target_pred_full[h_idx].detach().float().cpu()
-            exclude_cols = []
+            train_edges_dict = {}
             for t in TARGET_TYPES:
                 et = ('TCM_ID', 'herb_modulates_target', t)
                 if et in data_gpu.edge_types and hasattr(data_gpu[et], 'train_mask') and getattr(data_gpu[et], 'train_mask') is not None:
@@ -344,15 +344,9 @@ def main():
                     sel = (ei_tr[0] == h_idx).nonzero(as_tuple=True)[0]
                     if sel.numel() == 0: continue
                     tgt_local = ei_tr[1, sel]
-                    cols = tgt_local + offsets[t]
-                    exclude_cols.append(cols)
-            if len(exclude_cols) > 0:
-                exclude_cols = torch.unique(torch.cat(exclude_cols))
-                scores_filtered = scores.clone(); scores_filtered[exclude_cols] = float('-inf')
-            else:
-                scores_filtered = scores
+                    train_edges_dict[t] = tgt_local.tolist()
             K = int(args.topk_k)
-            top_idx = torch.argsort(scores_filtered, descending=True)[:K].tolist()
+            top_idx = torch.argsort(scores, descending=True)[:K].tolist()
             out_rows = []
             for j in top_idx:
                 for t in TARGET_TYPES:
@@ -360,7 +354,14 @@ def main():
                     if start <= j < end:
                         local_j = j - start
                         name = full_entity_id_map[t][local_j]
-                        out_rows.append({'rank': len(out_rows)+1, 'type': t, 'target': name, 'score': float(scores[j])})
+                        in_train = (t in train_edges_dict and local_j in train_edges_dict[t])
+                        out_rows.append({
+                            'rank': len(out_rows)+1, 
+                            'type': t, 
+                            'target': name, 
+                            'score': float(scores[j]),
+                            'in_train_set': in_train 
+                        })
                         break
             df_top = pd.DataFrame(out_rows)
             out_dir = os.path.join(args.results_dir, "topk"); os.makedirs(out_dir, exist_ok=True)
